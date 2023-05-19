@@ -1,0 +1,14 @@
+*.html
+*.log
+*.tex
+*.png
+*.docx
+.Rproj.user
+"_MACOSX"
+temp.txt
+temp/
+*.tmp
+.Renviron
+.RData
+.RDataTmp
+.Rhistory

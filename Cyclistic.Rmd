@@ -1,0 +1,544 @@
+<<<<<<< HEAD
+---
+title: "Cyclistic project"
+author: "Ezequiel"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cyclistic project
+[link to data](https://divvy-tripdata.s3.amazonaws.com/index.html)
+## Data analysis to solve a specific business problem: 
+### The Cyclistic marketing team wants to know better about their clients and how each client type use Cyclistic bikes
+### Loading the packages I need to work
+```{r, warning=FALSE}
+library(tidyverse)  #helps wrangle data
+library(lubridate)  #helps wrangle date attributes
+getwd() #displays your working directory
+#####setwd("C:/Users/zequi/OneDrive/Documentos/Coursera/Google Data Analytics/08-Google Data Analytics Capstone. Complete a Case Study/Cyclistic project")
+```
+##### Sets your working directory to simplify calls to data
+
+
+# Step 1: Collect Data
+### Upload Divvy dataset
+```{r loading data}
+trips202204 <- read.csv("./dataset/202204-divvy-tripdata.csv")
+trips202205 <- read.csv("./dataset/202205-divvy-tripdata.csv")
+trips202206 <- read.csv("./dataset/202206-divvy-tripdata.csv")
+trips202207 <- read.csv("./dataset/202207-divvy-tripdata.csv")
+trips202208 <- read.csv("./dataset/202208-divvy-tripdata.csv")
+trips202209 <- read.csv("./dataset/202209-divvy-tripdata.csv")
+trips202210 <- read.csv("./dataset/202210-divvy-tripdata.csv")
+trips202211 <- read.csv("./dataset/202211-divvy-tripdata.csv")
+trips202212 <- read.csv("./dataset/202212-divvy-tripdata.csv")
+trips202301 <- read.csv("./dataset/202301-divvy-tripdata.csv")
+trips202302 <- read.csv("./dataset/202302-divvy-tripdata.csv")
+trips202303 <- read.csv("./dataset/202303-divvy-tripdata.csv")
+```
+
+
+# Step 2: Wrangle data and combine into a single file
+### Compare column names each of the files
+```{r column names}
+colnames(trips202204)
+colnames(trips202205)
+colnames(trips202206)
+colnames(trips202207)
+colnames(trips202208)
+colnames(trips202209)
+colnames(trips202210)
+colnames(trips202211)
+colnames(trips202212)
+colnames(trips202301)
+colnames(trips202302)
+colnames(trips202303)
+```
+
+### Inspect the dataframes and look for incongruencies
+```{r getting to know data}
+str(trips202204)
+str(trips202205)
+str(trips202206) 
+str(trips202207)
+str(trips202208) 
+str(trips202209)
+str(trips202210)
+str(trips202211)
+str(trips202212)
+str(trips202301)
+str(trips202302)
+str(trips202303)
+```
+##### Here we have an issue with the stations. There's a lot of missing values
+
+### Stack individual monthly data frames into one big year-long data frame 
+```{r binding everything together}
+all_trips <- bind_rows(trips202204,trips202205,trips202206,trips202207,trips202208,trips202209,trips202210,trips202211,trips202212,trips202301,trips202302,trips202303)
+```
+
+### Inspect the new table that has been created
+```{r data inspection}
+colnames(all_trips)  
+nrow(all_trips)  
+dim(all_trips)  
+head(all_trips)  
+tail(all_trips)
+str(all_trips)  
+summary(all_trips)  
+glimpse(all_trips)
+library("skimr")
+skim_without_charts(all_trips)
+```
+
+
+# Step 3: Clean up and add data to prepare for analysis
+### Transform the time columns from character columns into proper time columns (POSIXct data types)
+```{r to datetime format}
+all_trips$ended_at <- as_datetime(all_trips$ended_at)
+all_trips$started_at <- as_datetime(all_trips$started_at)
+```
+
+### Create a column where calculate the time of the ride
+```{r calculation of ride duration}
+ride_length <- as.numeric(difftime(all_trips$ended_at,all_trips$started_at, units = "mins"))
+all_trips$ride_length <- ride_length
+```
+
+### Check if there is outliers in the new column
+```{r data cleaning 1}
+ggplot(all_trips, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_wrap(~rideable_type)
+```
+
+### Plenty of outliers, I have to clean a bit this column to work with it. I will remove docker_bike type in a new dataframe, and negative values (in ride_lenght) also
+```{r data cleaning 2}
+trips_cleaned <- all_trips %>% 
+  filter(rideable_type != "docked_bike") %>% 
+  filter(ride_length >= 0)
+```
+
+### Checking one more for outliers, and looking into the business problem *How different clients use different bikes*
+ggplot(trips_cleaned, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_grid(member_casual~rideable_type)
+```{r data cleaning 3}
+ggplot(trips_cleaned, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_grid(member_casual~rideable_type)
+```
+
+
+# Step 4: Conduct Descriptive analysis
+### Descriptive analysis on ride_lenght (in minutes)
+### Compare members and casual users
+```{r descriptive analysis}
+summary(trips_cleaned$ride_length)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = mean)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = median)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = max)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = min)
+```
+
+### Add a column with the day of the week when the ride started
+### See the average ride time by each day for members vs casual users
+```{r add weekday column}
+trips_cleaned$weekday <- weekdays(trips_cleaned$started_at)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual + trips_cleaned$weekday, FUN = mean)
+trips_cleaned$weekday <- ordered(trips_cleaned$weekday, levels=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+```
+##### Notice that the days of the week are out of order. Let's fix that.
+
+### Analyze ridership data by type and weekday
+```{r data analysis 1}
+trips_cleaned %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>%  
+  group_by(member_casual, weekday) %>%  
+  summarise(number_of_rides = n()		 
+            ,average_duration = mean(ride_length)) %>% 		
+  arrange(member_casual, weekday)	
+```
+
+### Create a visualization for average duration
+```{r average ride duration}
+trips_cleaned %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  ggtitle(label = 'Average ride lenght by client type', subtitle = 'Duration in minutes by weekday') +
+  xlab("Weekday") + ylab("Average duration (minutes)") +
+  scale_fill_discrete(name = "Client type")
+```
+
+### Create a visualization with number of rides by client type and weekday
+#### Group the data by client type and weekday, and calculate the number of rides
+```{r data analysis 2}
+rides_by_type_weekday <- trips_cleaned %>%
+  group_by(member_casual, weekday) %>%
+  summarize(num_rides = n()/1000)
+ggplot(rides_by_type_weekday, aes(x = weekday, y = num_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  ggtitle(label = "Number of rides by weekday, and by client type") +
+  labs(x = "Weekday", y = "Number of rides (in thousands)", fill = "Client type")
+```
+  
+### Analyze last year trend  by client type, grouped by month. Of course, there is a seasonal trend (in winter, bike usage is lower in Chicago)
+```{r seasonal trend analysis}
+trips_cleaned %>%
+  mutate(month = lubridate::floor_date(started_at, "month")) %>%
+  group_by(month, member_casual) %>%
+  summarise(n_rides = n()/1000) %>%
+  ggplot(aes(x = month, y = n_rides, color = member_casual)) +
+  geom_line() +
+  labs(title = "Number of rides by client type and month",
+       x = "Month",
+       y = "Number of rides (in thousands)")
+```
+
+### Start the geographical analysis
+```{r geographical analysis}
+library(ggmap)
+skim_without_charts(trips_cleaned)
+```
+
+### Group the data by start station name and calculate the number of rides for each station
+
+```{r station rank}
+start_station_counts <- trips_cleaned %>%
+  group_by(start_station_name, member_casual) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+```
+
+### Get a Chicago's map
+##### last time I try get_googlemap() function asks for a API key that I had to get. As this moment is free
+```{r google API key, echo=FALSE}
+register_google(key ="AIzaSyAs_hd_iOPRBHta3XY3p8mWwq9MDeTAzr0")
+```
+
+```{r ggmap example}
+map_chicago <- get_googlemap(center = c(lon = -87.6298, lat = 41.8781), zoom = 11)
+ggmap(map_chicago)
+```
+
+### Group by longitude and latitude, and client type. And then count number of rides in each group. I used 20 top locations to focus where to promote physicalmarketing programs
+```{r rides by location}
+rides_by_location <- trips_cleaned %>% 
+  group_by(start_lng, start_lat, member_casual) %>% 
+  summarize(num_rides = n()) %>% 
+  ungroup()
+top20_rides_by_location_member <- rides_by_location %>% 
+  filter(member_casual == "member") %>% 
+  top_n(20, num_rides)
+top20_rides_by_location_casual <- rides_by_location %>% 
+  filter(member_casual == "casual") %>% 
+  top_n(20, num_rides)
+```
+
+### Plot the map and the data on top of it
+```{r plotting map}
+ggmap(map_chicago) +
+  geom_point(data = top20_rides_by_location_member, aes(x = start_lng, y = start_lat), color="red") +
+  geom_point(data = top20_rides_by_location_casual, aes(x = start_lng, y = start_lat), color="blue") +
+  scale_size(range = c(1, 10)) +
+  labs(title = "Most frequent rides starting locations in Chicago",
+       caption = "Red = Members. Blue = Casual riders") +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank())
+```
+
+## Conclutions
+#### In the analysis above, I was able to infer that casual cyclists and members differ in the following points:
+####Casuals use the service more on weekends, especially between May and October. The rest of the year demand little service. On average, the casual tours are longer (in time).
+####Members tend to use the service less during the winter months (December to February), but it is also significantly higher than casual members.
+####In general, in winter the casuals demand very little service.
+####There is also a geographical peculiarity. The stations most used by members are further south of the city, in the Hide Park area, although they are also concentrated in the downtown area (near Greektown, West Loop Gate, and the University of Illinois). For their part, the busiest stations for casual users are located in the downtown area to the north of the city. (Lincoln Park, Lake View). We can say that a high percentage of uses occur within a radius of about 6 mi (10 km) from Downtown Chicago (The Loop), with much more activity within a radius of 4 mi (6.5 km) from The Loop.
+
+## Recomendations
+#### Increase marketing efforts during the winter months to target members, who tend to use the service less during this time. Offer discounts or promotions to encourage usage.
+#### Increase the number of bikes available during weekends and peak seasons to cater to the high demand from casual users.
+#### Consider introducing different pricing tiers or packages to incentivize more usage from both casual and member users.
+
+#### As a business person I would ask for financial information as well to give a comprehensive recommendation. I'd loke to know what's the gross margin per client type. I think that, given the low usage during winter months, there may not be much more demand for memberships. I would explore more on this before launching a whole marketing campaign.
+=======
+---
+title: "Cyclistic project"
+author: "Ezequiel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cyclistic project
+[link to data](https://divvy-tripdata.s3.amazonaws.com/index.html)
+## Data analysis to solve a specific business problem: 
+### The Cyclistic marketing team wants to know better about their clients and how each client type use Cyclistic bikes
+### Loading the packages I need to work
+```{r loading packages}
+library(tidyverse)  #helps wrangle data
+library(lubridate)  #helps wrangle date attributes
+getwd() #displays your working directory
+setwd("C:/Users/zequi/OneDrive/Documentos/Coursera/Google Data Analytics/08-Google Data Analytics Capstone. Complete a Case Study/Cyclistic project")
+```
+##### Sets your working directory to simplify calls to data
+
+
+# Step 1: Collect Data
+### Upload Divvy dataset
+```{r loading data}
+trips202204 <- read.csv("202204-divvy-tripdata.csv")
+trips202205 <- read.csv("202205-divvy-tripdata.csv")
+trips202206 <- read.csv("202206-divvy-tripdata.csv")
+trips202207 <- read.csv("202207-divvy-tripdata.csv")
+trips202208 <- read.csv("202208-divvy-tripdata.csv")
+trips202209 <- read.csv("202209-divvy-tripdata.csv")
+trips202210 <- read.csv("202210-divvy-tripdata.csv")
+trips202211 <- read.csv("202211-divvy-tripdata.csv")
+trips202212 <- read.csv("202212-divvy-tripdata.csv")
+trips202301 <- read.csv("202301-divvy-tripdata.csv")
+trips202302 <- read.csv("202302-divvy-tripdata.csv")
+trips202303 <- read.csv("202303-divvy-tripdata.csv")
+```
+
+
+# Step 2: Wrangle data and combine into a single file
+### Compare column names each of the files
+```{r column names}
+colnames(trips202204)
+colnames(trips202205)
+colnames(trips202206)
+colnames(trips202207)
+colnames(trips202208)
+colnames(trips202209)
+colnames(trips202210)
+colnames(trips202211)
+colnames(trips202212)
+colnames(trips202301)
+colnames(trips202302)
+colnames(trips202303)
+```
+
+### Inspect the dataframes and look for incongruencies
+```{r getting to know data}
+str(trips202204)
+str(trips202205)
+str(trips202206) 
+str(trips202207)
+str(trips202208) 
+str(trips202209)
+str(trips202210)
+str(trips202211)
+str(trips202212)
+str(trips202301)
+str(trips202302)
+str(trips202303)
+```
+##### Here we have an issue with the stations. There's a lot of missing values
+
+### Stack individual monthly data frames into one big year-long data frame 
+```{r binding everything together}
+all_trips <- bind_rows(trips202204,trips202205,trips202206,trips202207,trips202208,trips202209,trips202210,trips202211,trips202212,trips202301,trips202302,trips202303)
+```
+
+### Inspect the new table that has been created
+```{r data inspection}
+colnames(all_trips)  
+nrow(all_trips)  
+dim(all_trips)  
+head(all_trips)  
+tail(all_trips)
+str(all_trips)  
+summary(all_trips)  
+glimpse(all_trips)
+library("skimr")
+skim_without_charts(all_trips)
+```
+
+
+# Step 3: Clean up and add data to prepare for analysis
+### Transform the time columns from character columns into proper time columns (POSIXct data types)
+```{r to datetime format}
+all_trips$ended_at <- as_datetime(all_trips$ended_at)
+all_trips$started_at <- as_datetime(all_trips$started_at)
+```
+
+### Create a column where calculate the time of the ride
+```{r calculation of ride duration}
+ride_length <- as.numeric(difftime(all_trips$ended_at,all_trips$started_at, units = "mins"))
+all_trips$ride_length <- ride_length
+```
+
+### Check if there is outliers in the new column
+```{r data cleaning 1}
+ggplot(all_trips, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_wrap(~rideable_type)
+```
+
+### Plenty of outliers, I have to clean a bit this column to work with it. I will remove docker_bike type in a new dataframe, and negative values (in ride_lenght) also
+```{r data cleaning 2}
+trips_cleaned <- all_trips %>% 
+  filter(rideable_type != "docked_bike") %>% 
+  filter(ride_length >= 0)
+```
+
+### Checking one more for outliers, and looking into the business problem *How different clients use different bikes*
+ggplot(trips_cleaned, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_grid(member_casual~rideable_type)
+```{r data cleaning 3}
+ggplot(trips_cleaned, aes(y = ride_length, color = rideable_type), title = "Looking for outliers by bike type") + 
+  geom_boxplot() +
+  facet_grid(member_casual~rideable_type)
+```
+
+
+# Step 4: Conduct Descriptive analysis
+### Descriptive analysis on ride_lenght (in minutes)
+### Compare members and casual users
+```{r descriptive analysis}
+summary(trips_cleaned$ride_length)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = mean)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = median)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = max)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual, FUN = min)
+```
+
+### Add a column with the day of the week when the ride started
+### See the average ride time by each day for members vs casual users
+```{r add weekday column}
+trips_cleaned$weekday <- weekdays(trips_cleaned$started_at)
+aggregate(trips_cleaned$ride_length ~ trips_cleaned$member_casual + trips_cleaned$weekday, FUN = mean)
+trips_cleaned$weekday <- ordered(trips_cleaned$weekday, levels=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+```
+##### Notice that the days of the week are out of order. Let's fix that.
+
+### Analyze ridership data by type and weekday
+```{r data analysis 1}
+trips_cleaned %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>%  
+  group_by(member_casual, weekday) %>%  
+  summarise(number_of_rides = n()		 
+            ,average_duration = mean(ride_length)) %>% 		
+  arrange(member_casual, weekday)	
+```
+
+### Create a visualization for average duration
+```{r average ride duration}
+trips_cleaned %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  ggtitle(label = 'Average ride lenght by client type', subtitle = 'Duration in minutes by weekday') +
+  xlab("Weekday") + ylab("Average duration (minutes)") +
+  scale_fill_discrete(name = "Client type")
+```
+
+### Create a visualization with number of rides by client type and weekday
+#### Group the data by client type and weekday, and calculate the number of rides
+```{r data analysis 2}
+rides_by_type_weekday <- trips_cleaned %>%
+  group_by(member_casual, weekday) %>%
+  summarize(num_rides = n()/1000)
+ggplot(rides_by_type_weekday, aes(x = weekday, y = num_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  ggtitle(label = "Number of rides by weekday, and by client type") +
+  labs(x = "Weekday", y = "Number of rides (in thousands)", fill = "Client type")
+```
+  
+### Analyze last year trend  by client type, grouped by month. Of course, there is a seasonal trend (in winter, bike usage is lower in Chicago)
+```{r seasonal trend analysis}
+trips_cleaned %>%
+  mutate(month = lubridate::floor_date(started_at, "month")) %>%
+  group_by(month, member_casual) %>%
+  summarise(n_rides = n()/1000) %>%
+  ggplot(aes(x = month, y = n_rides, color = member_casual)) +
+  geom_line() +
+  labs(title = "Number of rides by client type and month",
+       x = "Month",
+       y = "Number of rides (in thousands)")
+```
+
+### Start the geographical analysis
+```{r geographical analysis}
+library(ggmap)
+skim_without_charts(trips_cleaned)
+```
+
+### Group the data by start station name and calculate the number of rides for each station
+
+```{r station rank}
+start_station_counts <- trips_cleaned %>%
+  group_by(start_station_name, member_casual) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+```
+
+### Get a Chicago's map
+##### last time I try get_googlemap() function asks for a API key that I had to get. As this moment is free
+```{r ggmap example}
+map_chicago <- get_googlemap(center = c(lon = -87.6298, lat = 41.8781), zoom = 11)
+ggmap(map_chicago)
+```
+
+### Group by longitude and latitude, and client type. And then count number of rides in each group. I used 20 top locations to focus where to promote physicalmarketing programs
+```{r rides by location}
+rides_by_location <- trips_cleaned %>% 
+  group_by(start_lng, start_lat, member_casual) %>% 
+  summarize(num_rides = n()) %>% 
+  ungroup()
+top20_rides_by_location_member <- rides_by_location %>% 
+  filter(member_casual == "member") %>% 
+  top_n(20, num_rides)
+top20_rides_by_location_casual <- rides_by_location %>% 
+  filter(member_casual == "casual") %>% 
+  top_n(20, num_rides)
+```
+
+### Plot the map and the data on top of it
+```{r plotting map}
+ggmap(map_chicago) +
+  geom_point(data = top20_rides_by_location_member, aes(x = start_lng, y = start_lat), color="red") +
+  geom_point(data = top20_rides_by_location_casual, aes(x = start_lng, y = start_lat), color="blue") +
+  scale_size(range = c(1, 10)) +
+  labs(title = "Most frequent rides starting locations in Chicago",
+       caption = "Red = Members. Blue = Casual riders") +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank())
+```
+
+## Conclutions
+#### In the analysis above, I was able to infer that casual cyclists and members differ in the following points:
+####Casuals use the service more on weekends, especially between May and October. The rest of the year demand little service. On average, the casual tours are longer (in time).
+####Members tend to use the service less during the winter months (December to February), but it is also significantly higher than casual members.
+####In general, in winter the casuals demand very little service.
+####There is also a geographical peculiarity. The stations most used by members are further south of the city, in the Hide Park area, although they are also concentrated in the downtown area (near Greektown, West Loop Gate, and the University of Illinois). For their part, the busiest stations for casual users are located in the downtown area to the north of the city. (Lincoln Park, Lake View). We can say that a high percentage of uses occur within a radius of about 6 mi (10 km) from Downtown Chicago (The Loop), with much more activity within a radius of 4 mi (6.5 km) from The Loop.
+
+## Recomendations
+#### Increase marketing efforts during the winter months to target members, who tend to use the service less during this time. Offer discounts or promotions to encourage usage.
+#### Increase the number of bikes available during weekends and peak seasons to cater to the high demand from casual users.
+#### Consider introducing different pricing tiers or packages to incentivize more usage from both casual and member users.
+
+#### As a business person I would ask for financial information as well to give a comprehensive recommendation. I'd loke to know what's the gross margin per client type. I think that, given the low usage during winter months, there may not be much more demand for memberships. I would explore more on this before launching a whole marketing campaign.
+>>>>>>> 03ed137aa03bf59434d4735c02a1a121cf525259
