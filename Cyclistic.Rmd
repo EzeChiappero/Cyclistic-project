@@ -224,9 +224,6 @@ start_station_counts <- trips_cleaned %>%
 
 ### Get a Chicago's map
 ##### last time I try get_googlemap() function asks for a API key that I had to get. As this moment is free
-```{r google API key, echo=FALSE}
-register_google(key ="AIzaSyAs_hd_iOPRBHta3XY3p8mWwq9MDeTAzr0")
-```
 
 ```{r ggmap example}
 map_chicago <- get_googlemap(center = c(lon = -87.6298, lat = 41.8781), zoom = 11)
